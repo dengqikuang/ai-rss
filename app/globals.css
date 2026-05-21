@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --paper: 249 247 241;
+    --ink: 23 22 20;
+    --card: 255 255 255;
+  }
+
+  .dark {
+    --paper: 21 21 21;
+    --ink: 210 210 210;
+    --card: 30 30 30;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
+  }
+
+  .dark * {
+    scrollbar-color: #4b5563 transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #d1d5db;
+    border-radius: 3px;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+  }
+
+  body {
+    background-color: rgb(var(--paper));
+    color: rgb(var(--ink));
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  .prose {
+    --tw-prose-body: rgb(47 45 42);
+    --tw-prose-headings: rgb(23 22 20);
+    --tw-prose-links: rgb(79 70 229);
+    --tw-prose-bold: rgb(23 22 20);
+    --tw-prose-quotes: rgb(79 70 229);
+    --tw-prose-quote-borders: rgb(229 231 235);
+    --tw-prose-code: rgb(23 22 20);
+    --tw-prose-hr: rgb(229 231 235);
+    --tw-prose-th-borders: rgb(209 213 219);
+    --tw-prose-td-borders: rgb(229 231 235);
+  }
+
+  .dark .prose {
+    --tw-prose-body: rgb(180 180 180);
+    --tw-prose-headings: rgb(230 230 230);
+    --tw-prose-links: rgb(129 140 248);
+    --tw-prose-bold: rgb(230 230 230);
+    --tw-prose-quotes: rgb(129 140 248);
+    --tw-prose-quote-borders: rgb(75 85 99);
+    --tw-prose-code: rgb(230 230 230);
+    --tw-prose-hr: rgb(75 85 99);
+    --tw-prose-th-borders: rgb(107 114 128);
+    --tw-prose-td-borders: rgb(75 85 99);
+  }
+
+  .article-card {
+    @apply rounded-xl border border-gray-200/60 bg-white p-5 transition-all duration-200 hover:shadow-soft;
+  }
+
+  .dark .article-card {
+    @apply border-gray-800/60 bg-[rgb(30,30,30)];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 active:bg-indigo-800;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 active:bg-gray-200;
+  }
+
+  .dark .btn-ghost {
+    @apply text-gray-400 hover:bg-gray-800 active:bg-gray-700;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded bg-gray-200;
+  }
+
+  .dark .skeleton {
+    @apply bg-gray-700;
+  }
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
