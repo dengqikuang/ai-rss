@@ -1,22 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, BookOpen } from 'lucide-react';
+import { RefreshCw, BookOpen, PlusCircle } from 'lucide-react';
 import { ArticleCard } from '@/components/ArticleCard';
 import { cn } from '@/lib/utils';
 
-type Filter = 'all' | 'unread' | 'bookmarked' | 'read_later';
+type Filter = 'ai_relevant' | 'all_raw' | 'unread' | 'bookmarked' | 'read_later';
 
 interface ArticleItem {
   id: number;
   title: string;
   summary: string | null;
   sourceName: string;
-  publishedAt: Date | null;
-  createdAt: Date;
+  publishedAt: Date | string | null;
+  createdAt: Date | string;
   isRead: boolean;
   isBookmarked: boolean;
   readLater: boolean;
+  aiSummary: string | null;
+  aiCategory: string | null;
+  relevanceScore: number | null;
+  fetchStatus: string;
 }
 
 interface SourceItem {
@@ -24,36 +28,44 @@ interface SourceItem {
   name: string;
 }
 
-const filters: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'unread', label: 'Unread' },
-  { key: 'bookmarked', label: 'Bookmarked' },
-  { key: 'read_later', label: 'Read Later' },
+const filters: { key: Filter; label: string; desc: string }[] = [
+  { key: 'ai_relevant', label: 'AI 精选', desc: '只看 AI 筛选通过的好内容' },
+  { key: 'all_raw', label: '全部来源', desc: '不过滤，显示全部抓取内容' },
+  { key: 'unread', label: '未读', desc: '尚未读完的文章' },
+  { key: 'bookmarked', label: '已收藏', desc: '手工标记收藏' },
+  { key: 'read_later', label: '稍后读', desc: '留着以后看' },
 ];
 
 export default function HomePage() {
   const [articles, setArticles] = useState<ArticleItem[]>([]);
   const [sources, setSources] = useState<SourceItem[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<Filter>('ai_relevant');
   const [sourceFilter, setSourceFilter] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Add URL modal
+  const [showAddUrl, setShowAddUrl] = useState(false);
+  const [addUrl, setAddUrl] = useState('');
+  const [addUrlSource, setAddUrlSource] = useState('');
+  const [addingUrl, setAddingUrl] = useState(false);
+  const [addUrlError, setAddUrlError] = useState<string | null>(null);
+
   const loadArticles = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (filter !== 'all') params.set('filter', filter);
+      if (filter !== 'ai_relevant') params.set('filter', filter);
       if (sourceFilter) params.set('source', String(sourceFilter));
 
       const res = await fetch(`/api/articles?${params}`);
-      if (!res.ok) throw new Error('Failed to load articles');
+      if (!res.ok) throw new Error('文章加载失败');
       const data = await res.json();
       setArticles(data.items ?? []);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load articles');
+      setError(e instanceof Error ? e.message : '文章加载失败');
     } finally {
       setLoading(false);
     }
@@ -84,6 +96,31 @@ export default function HomePage() {
       // ignore
     } finally {
       setFetching(false);
+    }
+  };
+
+  const handleAddUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addUrl.trim()) return;
+
+    try {
+      setAddingUrl(true);
+      setAddUrlError(null);
+      const res = await fetch('/api/articles/add-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: addUrl.trim(), sourceName: addUrlSource.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '添加失败');
+      setShowAddUrl(false);
+      setAddUrl('');
+      setAddUrlSource('');
+      await loadArticles();
+    } catch (e) {
+      setAddUrlError(e instanceof Error ? e.message : '添加失败');
+    } finally {
+      setAddingUrl(false);
     }
   };
 
@@ -129,9 +166,9 @@ export default function HomePage() {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="font-serif text-3xl font-bold tracking-tight">Your Feed</h1>
+        <h1 className="font-serif text-3xl font-bold tracking-tight">AI 创业情报台</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Stay updated with the latest from your sources
+          汇集 AI 和创业信源，由 AI 为你筛选和推荐
         </p>
       </div>
 
@@ -148,6 +185,7 @@ export default function HomePage() {
                   ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               )}
+              title={f.desc}
             >
               {f.label}
             </button>
@@ -161,7 +199,7 @@ export default function HomePage() {
             onChange={(e) => setSourceFilter(e.target.value ? Number(e.target.value) : null)}
             className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-800"
           >
-            <option value="">All sources</option>
+            <option value="">全部信源</option>
             {sources.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -170,14 +208,23 @@ export default function HomePage() {
           </select>
         )}
 
-        <button
-          onClick={handleFetch}
-          disabled={fetching}
-          className="btn-primary ml-auto"
-        >
-          <RefreshCw className={cn('h-4 w-4', fetching && 'animate-spin')} />
-          {fetching ? 'Fetching...' : 'Fetch New'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setShowAddUrl(true)}
+            className="btn-ghost"
+          >
+            <PlusCircle className="h-4 w-4" />
+            添加链接
+          </button>
+          <button
+            onClick={handleFetch}
+            disabled={fetching}
+            className="btn-primary"
+          >
+            <RefreshCw className={cn('h-4 w-4', fetching && 'animate-spin')} />
+            {fetching ? '更新中...' : '更新内容'}
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -199,7 +246,7 @@ export default function HomePage() {
           </div>
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           <button onClick={loadArticles} className="btn-primary mt-4">
-            Try Again
+            重试
           </button>
         </div>
       ) : articles.length === 0 ? (
@@ -208,14 +255,21 @@ export default function HomePage() {
             <BookOpen className="h-8 w-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            No articles yet
+            {filter === 'ai_relevant' ? '暂无 AI 精选文章' : '暂无文章'}
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Add sources and fetch to get started
+            {filter === 'ai_relevant'
+              ? '先添加信源，再更新内容，AI 会自动为你筛选'
+              : '先添加推荐信源，再更新内容开始阅读'}
           </p>
-          <a href="/sources" className="btn-primary mt-4">
-            Add Sources
-          </a>
+          <div className="mt-4 flex gap-2">
+            <a href="/sources" className="btn-primary">
+              添加信源
+            </a>
+            <button onClick={() => setShowAddUrl(true)} className="btn-ghost">
+              粘贴链接
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -227,6 +281,60 @@ export default function HomePage() {
               onToggleReadLater={() => toggleReadLater(article)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Add URL Modal */}
+      {showAddUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowAddUrl(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-4">手动添加文章</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              贴入任意文章的链接，系统自动抓取全文并用 AI 筛选分析
+            </p>
+            <form onSubmit={handleAddUrl} className="space-y-3">
+              <input
+                type="url"
+                value={addUrl}
+                onChange={(e) => setAddUrl(e.target.value)}
+                placeholder="https://example.com/article"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+                autoFocus
+              />
+              <input
+                type="text"
+                value={addUrlSource}
+                onChange={(e) => setAddUrlSource(e.target.value)}
+                placeholder="来源名称（选填，如：某博客）"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+              />
+              {addUrlError && (
+                <p className="text-sm text-red-500">{addUrlError}</p>
+              )}
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUrl(false)}
+                  className="btn-ghost"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={!addUrl.trim() || addingUrl}
+                  className="btn-primary"
+                >
+                  {addingUrl ? '抓取中...' : '添加'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

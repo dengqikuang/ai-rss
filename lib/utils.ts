@@ -5,12 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: Date | null) {
-  if (!date) {
-    return "Undated";
+export function formatDate(value: Date | string | number | null | undefined) {
+  if (!value) {
+    return "无日期";
   }
 
-  return new Intl.DateTimeFormat("en", {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "无日期";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
     day: "numeric",
     year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric"

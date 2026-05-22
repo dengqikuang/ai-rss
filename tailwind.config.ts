@@ -11,8 +11,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "Inter", "ui-sans-serif", "system-ui"],
-        serif: ["var(--font-newsreader)", "Newsreader", "ui-serif", "Georgia"]
+        sans: ["Inter", "ui-sans-serif", "system-ui"],
+        serif: ["Newsreader", "ui-serif", "Georgia"]
       },
       colors: {
         paper: {

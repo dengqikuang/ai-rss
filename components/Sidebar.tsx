@@ -14,8 +14,8 @@ import {
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Home', icon: BookOpen },
-  { href: '/sources', label: 'Sources', icon: Rss },
+  { href: '/', label: '首页', icon: BookOpen },
+  { href: '/sources', label: '信源', icon: Rss },
 ];
 
 export function Sidebar() {
@@ -44,7 +44,7 @@ export function Sidebar() {
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600">
           <BookOpen className="h-5 w-5 text-white" />
         </div>
-        <span className="text-lg font-semibold tracking-tight">AI Reader</span>
+        <span className="text-lg font-semibold tracking-tight">AI 阅读器</span>
       </div>
 
       {/* Nav */}
@@ -84,7 +84,7 @@ export function Sidebar() {
           ) : (
             <Moon className="h-4 w-4" />
           )}
-          {dark ? 'Light Mode' : 'Dark Mode'}
+          {dark ? '浅色模式' : '深色模式'}
         </button>
       </div>
     </div>
@@ -96,7 +96,7 @@ export function Sidebar() {
       <button
         onClick={() => setMobileOpen(true)}
         className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-md lg:hidden dark:bg-gray-900"
-        aria-label="Open menu"
+        aria-label="打开菜单"
       >
         <Menu className="h-5 w-5" />
       </button>

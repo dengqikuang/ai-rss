@@ -37,7 +37,14 @@ export const articles = sqliteTable(
     publishedAt: integer("published_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
-      .default(sql`(unixepoch())`)
+      .default(sql`(unixepoch())`),
+    // AI pipeline fields
+    isRelevant: integer("is_relevant"),
+    relevanceScore: integer("relevance_score"),
+    aiSummary: text("ai_summary"),
+    aiCategory: text("ai_category"),
+    rawHtml: text("raw_html"),
+    fetchStatus: text("fetch_status").notNull().default("pending")
   },
   (table) => ({
     urlIdx: uniqueIndex("articles_url_unique").on(table.url)

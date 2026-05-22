@@ -16,12 +16,12 @@ function idFromParams(params: { id: string }) {
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const id = idFromParams(params);
   if (!id) {
-    return NextResponse.json({ error: "Invalid article id" }, { status: 400 });
+    return NextResponse.json({ error: "无效的文章 ID" }, { status: 400 });
   }
 
   const article = await getArticle(id);
   if (!article) {
-    return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
   return NextResponse.json(article);
@@ -31,11 +31,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   ensureDatabase();
   const id = idFromParams(params);
   if (!id) {
-    return NextResponse.json({ error: "Invalid article id" }, { status: 400 });
+    return NextResponse.json({ error: "无效的文章 ID" }, { status: 400 });
   }
 
   if (!(await articleExists(id))) {
-    return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
   const body = (await request.json()) as {
@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   };
 
   if (Object.keys(state).length === 0) {
-    return NextResponse.json({ error: "No supported fields provided" }, { status: 400 });
+    return NextResponse.json({ error: "没有可更新的字段" }, { status: 400 });
   }
 
   await db

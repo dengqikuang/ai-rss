@@ -14,7 +14,14 @@ export async function GET(request: NextRequest) {
   const result = await listArticles({
     page: Number.isFinite(page) ? page : 1,
     limit: Number.isFinite(limit) ? limit : 20,
-    filter: filter === "unread" || filter === "bookmarked" || filter === "read_later" ? filter : undefined,
+    filter:
+      filter === "unread" ||
+      filter === "bookmarked" ||
+      filter === "read_later" ||
+      filter === "ai_relevant" ||
+      filter === "all_raw"
+        ? filter
+        : "ai_relevant", // default to AI-relevant only
     sourceId: source ? Number(source) : undefined
   });
 

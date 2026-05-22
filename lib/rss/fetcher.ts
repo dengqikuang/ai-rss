@@ -1,10 +1,12 @@
-import { and, desc, eq, isNull, lt, max, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, lt, max, sql } from "drizzle-orm";
 import Parser from "rss-parser";
 import * as cheerio from "cheerio";
 import { db } from "@/lib/db";
-import { ensureDatabase } from "@/lib/db/migrate";
+import { ensureDatabase, getManualSourceId } from "@/lib/db/migrate";
 import { articles, readingState, sources } from "@/lib/db/schema";
 import { plainText } from "@/lib/utils";
+import { checkRelevance, generateReadingNote } from "@/lib/ai";
+import { scrapeContent } from "@/lib/scraper";
 
 type FeedItem = {
   title?: string;
@@ -71,6 +73,194 @@ function feedTitleFromUrl(feedUrl: string) {
   return url.hostname.replace(/^www\./, "");
 }
 
+// ---------- AI Pipeline ----------
+
+/**
+ * Process a single article through the AI pipeline:
+ * 1. Check relevance (title + summary)
+ * 2. If relevant, scrape full content
+ * 3. Generate AI reading recommendation
+ */
+async function processArticleWithAI(articleId: number) {
+  const [article] = await db
+    .select()
+    .from(articles)
+    .where(eq(articles.id, articleId))
+    .limit(1);
+
+  if (!article) return;
+
+  // Mark as checking
+  await db
+    .update(articles)
+    .set({ fetchStatus: "checking" })
+    .where(eq(articles.id, articleId));
+
+  const title = article.title || "";
+  const summary = article.summary || "";
+
+  try {
+    // Step 1: Relevance check
+    const relevance = await checkRelevance(title, summary);
+
+    if (!relevance.relevant) {
+      await db
+        .update(articles)
+        .set({
+          isRelevant: 0,
+          relevanceScore: relevance.score,
+          fetchStatus: "skipped"
+        })
+        .where(eq(articles.id, articleId));
+      return;
+    }
+
+    // Step 2: Scrape full content
+    let rawHtml: string | null = null;
+    if (article.url) {
+      rawHtml = await scrapeContent(article.url);
+    }
+
+    // Step 3: Generate reading note
+    const fullText = rawHtml
+      ? cheerio.load(rawHtml).text().trim()
+      : summary;
+
+    const reading = await generateReadingNote(title, fullText);
+
+    // Save results
+    await db
+      .update(articles)
+      .set({
+        isRelevant: 1,
+        relevanceScore: relevance.score,
+        aiSummary: reading.summary,
+        aiCategory: reading.category,
+        rawHtml,
+        fetchStatus: "done"
+      })
+      .where(eq(articles.id, articleId));
+  } catch (error) {
+    await db
+      .update(articles)
+      .set({
+        isRelevant: 1, // on error, default to relevant so the article is visible
+        relevanceScore: 50,
+        fetchStatus: "error"
+      })
+      .where(eq(articles.id, articleId));
+    throw error;
+  }
+}
+
+/**
+ * Process all newly-fetched articles that haven't gone through AI pipeline yet.
+ * Processes in batches to avoid rate limiting.
+ */
+export async function processPendingArticles() {
+  ensureDatabase();
+  const pending = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(eq(articles.fetchStatus, "pending"))
+    .orderBy(desc(articles.createdAt))
+    .limit(20);
+
+  const results: { id: number; ok: boolean; error?: string }[] = [];
+
+  for (const { id } of pending) {
+    try {
+      await processArticleWithAI(id);
+      results.push({ id, ok: true });
+    } catch (error) {
+      results.push({
+        id,
+        ok: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Manually add a URL to the reading queue:
+ * scrape the page → extract title/content → AI pipeline
+ */
+export async function addArticleByUrl(url: string, sourceName?: string) {
+  ensureDatabase();
+
+  const normalized = normalizeUrl(url);
+
+  // Check if already exists
+  const [existing] = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(eq(articles.url, normalized))
+    .limit(1);
+
+  let articleId: number;
+
+  if (existing) {
+    // Re-process existing article
+    articleId = existing.id;
+    await db
+      .update(articles)
+      .set({ fetchStatus: "pending" })
+      .where(eq(articles.id, articleId));
+  } else {
+    // Scrape page to get basic info
+    let title = normalized;
+    let pageContent: string | null = null;
+
+    try {
+      const html = await scrapeContent(normalized);
+      if (html) {
+        pageContent = html;
+        const $ = cheerio.load(html);
+        title = $("title").text().trim() || $("h1").first().text().trim() || normalized;
+      }
+    } catch {
+      // Use URL as title if scraping fails
+    }
+
+    const summary = pageContent
+      ? plainText(cheerio.load(pageContent).text().trim(), 300)
+      : null;
+
+    // Insert without source_id, use sentinel source for manual articles
+    const manualId = getManualSourceId();
+    const [inserted] = await db
+      .insert(articles)
+      .values({
+        sourceId: manualId,
+        title,
+        url: normalized,
+        author: sourceName || null,
+        content: pageContent,
+        summary,
+        rawHtml: pageContent,
+        fetchStatus: "pending"
+      })
+      .onConflictDoNothing({ target: articles.url })
+      .returning({ id: articles.id });
+
+    if (!inserted) {
+      throw new Error("文章已存在");
+    }
+
+    articleId = inserted.id;
+  }
+
+  // Run AI pipeline immediately
+  await processArticleWithAI(articleId);
+
+  return getArticle(articleId);
+}
+
+// ---------- Feed Fetching ----------
+
 export async function inspectFeed(feedUrl: string) {
   const normalizedFeedUrl = normalizeUrl(feedUrl);
   const feed = await parser.parseURL(normalizedFeedUrl);
@@ -111,7 +301,8 @@ export async function fetchSource(source: typeof sources.$inferSelect) {
         author: item.creator ?? (item as any)["dc:creator"] ?? item.author ?? null,
         content,
         summary,
-        publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null
+        publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
+        fetchStatus: "pending"
       })
       .onConflictDoNothing({ target: articles.url });
 
@@ -133,7 +324,10 @@ export async function fetchAllSources() {
   const allSources = await db.select().from(sources).orderBy(sources.name);
   const results = [];
 
-  for (const source of allSources) {
+  // Skip sentinel sources (feed_url starting with "manual://")
+  const realSources = allSources.filter((s) => !s.feedUrl.startsWith("manual://"));
+
+  for (const source of realSources) {
     try {
       const inserted = await fetchSource(source);
       results.push({ sourceId: source.id, name: source.name, inserted, ok: true });
@@ -148,9 +342,23 @@ export async function fetchAllSources() {
     }
   }
 
+  // Monitor non-RSS blogs for new articles
+  let blogResults: { name: string; added: number }[] = [];
+  try {
+    const { monitorBlogs } = await import("@/lib/scraper/blog-monitor");
+    blogResults = await monitorBlogs();
+  } catch {
+    // blog monitor is optional
+  }
+
+  // Run AI pipeline on newly-fetched articles
+  const aiResults = await processPendingArticles();
+
   return {
     totalInserted: results.reduce((sum, result) => sum + result.inserted, 0),
-    results
+    results,
+    aiProcessed: aiResults.length,
+    blogs: blogResults
   };
 }
 
@@ -169,10 +377,12 @@ export async function fetchIfStale(maxAgeMs = 5 * 60 * 1000) {
   return fetchAllSources();
 }
 
+// ---------- List / Query ----------
+
 export async function listArticles(options: {
   page?: number;
   limit?: number;
-  filter?: "unread" | "bookmarked" | "read_later";
+  filter?: "unread" | "bookmarked" | "read_later" | "ai_relevant" | "all_raw";
   sourceId?: number;
 }) {
   ensureDatabase();
@@ -197,6 +407,13 @@ export async function listArticles(options: {
     predicates.push(eq(readingState.readLater, true));
   }
 
+  // "ai_relevant" is the default view: only show AI-relevant articles
+  if (options.filter === "ai_relevant" || !options.filter) {
+    predicates.push(eq(articles.isRelevant, 1));
+  }
+
+  // "all_raw" shows everything (包括未筛选和不相关的)
+
   const rows = await db
     .select({
       id: articles.id,
@@ -207,21 +424,35 @@ export async function listArticles(options: {
       summary: articles.summary,
       publishedAt: articles.publishedAt,
       createdAt: articles.createdAt,
-      sourceName: sources.name,
+      sourceName: sql<string>`coalesce(${sources.name}, '手动添加')`,
       sourceIconUrl: sources.iconUrl,
       isRead: sql<boolean>`coalesce(${readingState.isRead}, false)`,
       isBookmarked: sql<boolean>`coalesce(${readingState.isBookmarked}, false)`,
-      readLater: sql<boolean>`coalesce(${readingState.readLater}, false)`
+      readLater: sql<boolean>`coalesce(${readingState.readLater}, false)`,
+      isRelevant: articles.isRelevant,
+      relevanceScore: articles.relevanceScore,
+      aiSummary: articles.aiSummary,
+      aiCategory: articles.aiCategory,
+      fetchStatus: articles.fetchStatus
     })
     .from(articles)
-    .innerJoin(sources, eq(articles.sourceId, sources.id))
+    .leftJoin(sources, eq(articles.sourceId, sources.id))
     .leftJoin(readingState, eq(articles.id, readingState.articleId))
     .where(predicates.length ? and(...predicates) : undefined)
     .orderBy(desc(sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`))
     .limit(limit)
     .offset(offset);
 
-  return { page, limit, items: rows };
+  return {
+    page,
+    limit,
+    items: rows.map((row) => ({
+      ...row,
+      isRead: Boolean(row.isRead),
+      isBookmarked: Boolean(row.isBookmarked),
+      readLater: Boolean(row.readLater)
+    }))
+  };
 }
 
 export async function getArticle(id: number) {

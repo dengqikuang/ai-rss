@@ -19,4 +19,9 @@ export type ArticleListItem = {
   isRead: boolean;
   isBookmarked: boolean;
   readLater: boolean;
+  isRelevant: number | null;
+  relevanceScore: number | null;
+  aiSummary: string | null;
+  aiCategory: string | null;
+  fetchStatus: string;
 };

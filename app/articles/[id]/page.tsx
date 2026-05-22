@@ -9,6 +9,7 @@ import {
   BookmarkCheck,
   Clock,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -19,8 +20,8 @@ interface ArticleDetail {
   author: string | null;
   content: string | null;
   summary: string | null;
-  publishedAt: Date | null;
-  createdAt: Date;
+  publishedAt: Date | string | null;
+  createdAt: Date | string;
   source: {
     id: number;
     name: string;
@@ -30,8 +31,13 @@ interface ArticleDetail {
     isRead: boolean;
     isBookmarked: boolean;
     readLater: boolean;
-    readAt: Date | null;
+    readAt: Date | string | null;
   } | null;
+  aiSummary?: string | null;
+  aiCategory?: string | null;
+  relevanceScore?: number | null;
+  rawHtml?: string | null;
+  isRelevant?: number | null;
 }
 
 export default function ArticlePage() {
@@ -47,7 +53,7 @@ export default function ArticlePage() {
 
     fetch(`/api/articles/${id}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error(res.status === 404 ? 'Article not found' : 'Failed to load');
+        if (!res.ok) throw new Error(res.status === 404 ? '文章不存在' : '文章加载失败');
         const data = await res.json();
         setArticle(data);
         setError(null);
@@ -103,16 +109,18 @@ export default function ArticlePage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <p className="text-sm text-red-600 dark:text-red-400">
-          {error || 'Article not found'}
+          {error || '文章不存在'}
         </p>
         <button onClick={() => router.back()} className="btn-primary mt-4">
-          Go Back
+          返回
         </button>
       </div>
     );
   }
 
   const rs = article.readingState;
+  // Determine which content to show: scraped rawHtml > RSS content
+  const displayContent = article.rawHtml || article.content;
 
   return (
     <article>
@@ -122,8 +130,33 @@ export default function ArticlePage() {
         className="btn-ghost -ml-2 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Feed
+        返回订阅
       </Link>
+
+      {/* AI Recommendation Bar */}
+      {article.aiSummary && (
+        <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="h-4 w-4 text-indigo-500" />
+            <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+              AI 推荐
+            </span>
+            {article.aiCategory && (
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-600 dark:bg-indigo-900 dark:text-indigo-400">
+                {article.aiCategory}
+              </span>
+            )}
+            {article.relevanceScore != null && (
+              <span className="text-xs text-indigo-400">
+                相关度 {article.relevanceScore}%
+              </span>
+            )}
+          </div>
+          <p className="text-sm leading-relaxed text-indigo-600/80 dark:text-indigo-300/80">
+            {article.aiSummary}
+          </p>
+        </div>
+      )}
 
       {/* Meta */}
       <div className="mb-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -159,7 +192,7 @@ export default function ArticlePage() {
           ) : (
             <Bookmark className="h-4 w-4" />
           )}
-          {rs?.isBookmarked ? 'Bookmarked' : 'Bookmark'}
+          {rs?.isBookmarked ? '已收藏' : '收藏'}
         </button>
         <button
           onClick={() => updateState({ readLater: !rs?.readLater })}
@@ -169,7 +202,7 @@ export default function ArticlePage() {
           )}
         >
           <Clock className="h-4 w-4" />
-          {rs?.readLater ? 'Saved for Later' : 'Read Later'}
+          {rs?.readLater ? '已加入稍后读' : '稍后读'}
         </button>
         {article.url && (
           <a
@@ -179,7 +212,7 @@ export default function ArticlePage() {
             className="btn-ghost ml-auto"
           >
             <ExternalLink className="h-4 w-4" />
-            Open Original
+            查看原文
           </a>
         )}
       </div>
@@ -188,15 +221,15 @@ export default function ArticlePage() {
       <div className="mb-8 border-t border-gray-200 dark:border-gray-800" />
 
       {/* Content */}
-      {article.content ? (
+      {displayContent ? (
         <div
           className="prose prose-lg max-w-none dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: article.content }}
+          dangerouslySetInnerHTML={{ __html: displayContent }}
         />
       ) : (
         <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Full content not available.{' '}
+            暂无全文内容。{' '}
             {article.url && (
               <a
                 href={article.url}
@@ -204,7 +237,7 @@ export default function ArticlePage() {
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:underline dark:text-indigo-400"
               >
-                View original article &rarr;
+                查看原文 &rarr;
               </a>
             )}
           </p>

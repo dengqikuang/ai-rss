@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Check, Plus, Trash2, RefreshCw, ExternalLink, Sparkles } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 interface Source {
@@ -11,14 +11,23 @@ interface Source {
   feedUrl: string;
   description: string | null;
   iconUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface RecommendedSource {
+  name: string;
+  feedUrl: string;
+  description: string;
+  category: string;
 }
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<Source[]>([]);
+  const [recommendedSources, setRecommendedSources] = useState<RecommendedSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
+  const [addingRecommended, setAddingRecommended] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [feedUrl, setFeedUrl] = useState('');
   const [name, setName] = useState('');
@@ -28,7 +37,7 @@ export default function SourcesPage() {
   const loadSources = async () => {
     try {
       const res = await fetch('/api/sources');
-      if (!res.ok) throw new Error('Failed to load sources');
+      if (!res.ok) throw new Error('信源加载失败');
       const data = await res.json();
       setSources(data.items ?? []);
     } catch {
@@ -38,9 +47,34 @@ export default function SourcesPage() {
     }
   };
 
+  const loadRecommendedSources = async () => {
+    try {
+      const res = await fetch('/api/sources/recommended');
+      if (!res.ok) return;
+      const data = await res.json();
+      setRecommendedSources(data.items ?? []);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     loadSources();
+    loadRecommendedSources();
   }, []);
+
+  const addSource = async (source: { feedUrl: string; name?: string }) => {
+    const res = await fetch('/api/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(source),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || '添加信源失败');
+    }
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,28 +83,30 @@ export default function SourcesPage() {
     setAdding(true);
     setAddError(null);
     try {
-      const res = await fetch('/api/sources', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedUrl: feedUrl.trim(),
-          name: name.trim() || undefined,
-        }),
+      await addSource({
+        feedUrl: feedUrl.trim(),
+        name: name.trim() || undefined,
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to add source');
-      }
-
       await loadSources();
       setFeedUrl('');
       setName('');
       setShowForm(false);
     } catch (e) {
-      setAddError(e instanceof Error ? e.message : 'Failed to add source');
+      setAddError(e instanceof Error ? e.message : '添加信源失败');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleAddRecommended = async (source: RecommendedSource) => {
+    setAddingRecommended(source.feedUrl);
+    try {
+      await addSource({ feedUrl: source.feedUrl, name: source.name });
+      await loadSources();
+    } catch {
+      // ignore
+    } finally {
+      setAddingRecommended(null);
     }
   };
 
@@ -99,9 +135,9 @@ export default function SourcesPage() {
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-3xl font-bold tracking-tight">Sources</h1>
+          <h1 className="font-serif text-3xl font-bold tracking-tight">信源管理</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage your RSS feeds
+            管理你的 RSS 订阅源
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -111,25 +147,78 @@ export default function SourcesPage() {
             className="btn-ghost"
           >
             <RefreshCw className={`h-4 w-4 ${fetching ? 'animate-spin' : ''}`} />
-            Fetch All
+            全部更新
           </button>
           <button onClick={() => setShowForm(true)} className="btn-primary">
             <Plus className="h-4 w-4" />
-            Add Source
+            添加信源
           </button>
         </div>
       </div>
 
+      {/* Recommended sources */}
+      <section className="mb-8">
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            推荐 AI / 创业信源
+          </h2>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {recommendedSources.map((source) => {
+            const added = sources.some((item) => item.feedUrl === source.feedUrl);
+            return (
+              <div
+                key={source.feedUrl}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+              >
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                      {source.name}
+                    </h3>
+                    <p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">
+                      {source.category}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAddRecommended(source)}
+                    disabled={added || addingRecommended === source.feedUrl}
+                    className="btn-ghost shrink-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {added ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        已添加
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        {addingRecommended === source.feedUrl ? '添加中' : '添加'}
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                  {source.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Add form */}
       {showForm && (
         <div className="mb-8 rounded-xl border border-gray-200 bg-gray-50 p-6 dark:border-gray-800 dark:bg-gray-900">
-          <h2 className="mb-4 text-lg font-semibold">Add New Source</h2>
+          <h2 className="mb-4 text-lg font-semibold">添加新信源</h2>
           <form onSubmit={handleAdd} className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                RSS Feed URL *
+              <label htmlFor="feed-url" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                RSS Feed 地址 *
               </label>
               <input
+                id="feed-url"
                 type="url"
                 value={feedUrl}
                 onChange={(e) => setFeedUrl(e.target.value)}
@@ -139,14 +228,15 @@ export default function SourcesPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Display Name (optional)
+              <label htmlFor="source-name" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                显示名称（可选）
               </label>
               <input
+                id="source-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Auto-detected from feed"
+                placeholder="留空则自动从 Feed 识别"
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800"
               />
             </div>
@@ -157,7 +247,7 @@ export default function SourcesPage() {
 
             <div className="flex items-center gap-2">
               <button type="submit" disabled={adding} className="btn-primary">
-                {adding ? 'Adding...' : 'Add Source'}
+                {adding ? '正在添加...' : '添加信源'}
               </button>
               <button
                 type="button"
@@ -167,7 +257,7 @@ export default function SourcesPage() {
                 }}
                 className="btn-ghost"
               >
-                Cancel
+                取消
               </button>
             </div>
           </form>
@@ -191,14 +281,14 @@ export default function SourcesPage() {
             <RefreshCw className="h-8 w-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            No sources yet
+            暂无信源
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Add RSS feeds to start reading
+            添加 RSS Feed 后即可开始阅读
           </p>
           <button onClick={() => setShowForm(true)} className="btn-primary mt-4">
             <Plus className="h-4 w-4" />
-            Add Your First Source
+            添加第一个信源
           </button>
         </div>
       ) : (
@@ -228,16 +318,16 @@ export default function SourcesPage() {
                   </p>
                 )}
                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                  Feed: {source.feedUrl.slice(0, 60)}...
+                  Feed：{source.feedUrl.slice(0, 60)}...
                 </p>
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                  Updated {formatDate(source.updatedAt)}
+                  更新于 {formatDate(source.updatedAt)}
                 </p>
               </div>
               <button
                 onClick={() => handleDelete(source.id)}
                 className="btn-ghost ml-4 shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
-                title="Delete source"
+                title="删除信源"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
