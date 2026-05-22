@@ -223,7 +223,7 @@ export default function ArticlePage() {
       {/* Content */}
       {displayContent ? (
         <div
-          className="prose prose-lg max-w-none dark:prose-invert"
+          className="prose prose-lg max-w-none dark:prose-invert article-content"
           dangerouslySetInnerHTML={{ __html: displayContent }}
         />
       ) : (

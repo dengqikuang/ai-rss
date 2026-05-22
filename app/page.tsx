@@ -51,6 +51,7 @@ export default function HomePage() {
   const [addUrlSource, setAddUrlSource] = useState('');
   const [addingUrl, setAddingUrl] = useState(false);
   const [addUrlError, setAddUrlError] = useState<string | null>(null);
+  const [addUrlSuccess, setAddUrlSuccess] = useState<string | null>(null);
 
   const loadArticles = useCallback(async () => {
     try {
@@ -106,6 +107,7 @@ export default function HomePage() {
     try {
       setAddingUrl(true);
       setAddUrlError(null);
+      setAddUrlSuccess(null);
       const res = await fetch('/api/articles/add-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,10 +115,13 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '添加失败');
-      setShowAddUrl(false);
+
       setAddUrl('');
       setAddUrlSource('');
+      setShowAddUrl(false);
+      setAddUrlSuccess(data.title ? `"${data.title}" 添加成功，AI 已完成分析` : '文章添加成功，AI 已完成分析');
       await loadArticles();
+      setTimeout(() => setAddUrlSuccess(null), 5000);
     } catch (e) {
       setAddUrlError(e instanceof Error ? e.message : '添加失败');
     } finally {
@@ -171,6 +176,22 @@ export default function HomePage() {
           汇集 AI 和创业信源，由 AI 为你筛选和推荐
         </p>
       </div>
+
+      {/* Success / Error Toast */}
+      {addUrlSuccess && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          {addUrlSuccess}
+          <button onClick={() => setAddUrlSuccess(null)} className="ml-auto text-green-500 hover:text-green-700">&times;</button>
+        </div>
+      )}
+      {addUrlError && !showAddUrl && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {addUrlError}
+          <button onClick={() => setAddUrlError(null)} className="ml-auto text-red-500 hover:text-red-700">&times;</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -302,7 +323,7 @@ export default function HomePage() {
               <input
                 type="url"
                 value={addUrl}
-                onChange={(e) => setAddUrl(e.target.value)}
+                onChange={(e) => { setAddUrl(e.target.value); setAddUrlError(null); }}
                 placeholder="https://example.com/article"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
                 autoFocus
@@ -315,7 +336,9 @@ export default function HomePage() {
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
               />
               {addUrlError && (
-                <p className="text-sm text-red-500">{addUrlError}</p>
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+                  {addUrlError}
+                </div>
               )}
               <div className="flex gap-2 justify-end pt-2">
                 <button
@@ -330,7 +353,7 @@ export default function HomePage() {
                   disabled={!addUrl.trim() || addingUrl}
                   className="btn-primary"
                 >
-                  {addingUrl ? '抓取中...' : '添加'}
+                  {addingUrl ? 'AI 正在分析中，请稍候...' : '添加'}
                 </button>
               </div>
             </form>

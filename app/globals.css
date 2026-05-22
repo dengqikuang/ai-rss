@@ -102,6 +102,25 @@
   .dark .skeleton {
     @apply bg-gray-700;
   }
+
+  .article-content img {
+    max-width: 100%;
+    height: auto !important;
+    max-height: 480px;
+    object-fit: contain;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .article-content figure {
+    margin: 1.5rem auto;
+  }
+
+  .article-content svg,
+  .article-content iframe {
+    display: none;
+  }
 }
 
 @layer utilities {

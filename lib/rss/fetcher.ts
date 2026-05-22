@@ -112,7 +112,7 @@ async function processArticleWithAI(articleId: number) {
           fetchStatus: "skipped"
         })
         .where(eq(articles.id, articleId));
-      return;
+      throw new Error(`AI 判定该文章与 AI/创业主题不相关（相关度 ${relevance.score}分）`);
     }
 
     // Step 2: Scrape full content

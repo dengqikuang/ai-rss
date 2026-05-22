@@ -4,12 +4,62 @@ import Link from 'next/link';
 import { Bookmark, BookmarkCheck, Clock, CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 
+const AI_KEYWORDS: Record<string, RegExp> = {
+  'ChatGPT': /\bchatgpt\b/i,
+  'GPT-4': /\bgpt[\s\-]?4o?\b/i,
+  'GPT-5': /\bgpt[\s\-]?5\b/i,
+  'Claude': /\bclaude\b/i,
+  'Gemini': /\bgemini\b/i,
+  'Llama': /\bllama\b/i,
+  'Sora': /\bsora\b/i,
+  'Midjourney': /\bmidjourney\b/i,
+  'Stable Diffusion': /\bstable[\s\-]?diffusion\b/i,
+  'DALL-E': /\bdall[\s\-]?e\b/i,
+  'Copilot': /\bcopilot\b/i,
+  'DeepSeek': /\bdeepseek\b/i,
+  'Kimi': /\bkimi\b/i,
+  '通义千问': /通义千问|qwen/i,
+  '文心一言': /文心一言|ernie/i,
+  'Cursor': /\bcursor\b/i,
+  'Perplexity': /\bperplexity\b/i,
+  'LLM': /\bllm\b|\blarge language model/i,
+  'AIGC': /\baigc\b/i,
+  'Agent': /\bagent\b/i,
+  'RAG': /\brag\b|\bretrieval.?augmented/i,
+  '多模态': /多模态|multi.?modal/i,
+  'AI 搜索': /ai搜索|ai搜索引擎|\bai search/i,
+  'AI 编程': /ai编程|ai写代码|coding copilot|代码助手/i,
+  '具身智能': /具身智能|embodied ai/i,
+  'AI 芯片': /ai芯片|gpu|nvidia|英伟达|tpu/i,
+  'Fine-tuning': /fine.?tun|微调/i,
+  'Prompt': /prompt engineering|提示词工程/i,
+  'MCP': /\bmcp\b|model context protocol/i,
+  'Reasoning': /\breasoning\b|推理模型|\bo[14]\b/i,
+  'Diffusion': /\bdiffusion\b/i,
+  'Transformers': /\btransformers?\b/i,
+  'Voice AI': /voice ai|语音ai|tts|语音合成/i,
+  'AI 视频': /ai视频|video ai|ai生成视频/i,
+  'OpenAI': /\bopenai\b/i,
+  'Anthropic': /\banthropic\b/i,
+  'Google AI': /google ai|bard|google deepmind/i,
+};
+
+function extractTags(title: string, summary: string | null, aiSummary: string | null, aiCategory: string | null): string[] {
+  const text = [title, summary, aiSummary, aiCategory].filter(Boolean).join(' ');
+  const tags: string[] = [];
+  for (const [tag, re] of Object.entries(AI_KEYWORDS)) {
+    if (re.test(text)) tags.push(tag);
+  }
+  return tags.slice(0, 4);
+}
+
 interface ArticleCardProps {
   id: number;
   title: string;
   summary: string | null;
   sourceName: string;
   publishedAt: Date | string | null;
+  createdAt: Date | string;
   isRead: boolean;
   isBookmarked: boolean;
   readLater: boolean;
@@ -27,6 +77,7 @@ export function ArticleCard({
   summary,
   sourceName,
   publishedAt,
+  createdAt,
   isRead,
   isBookmarked,
   readLater,
@@ -75,11 +126,28 @@ export function ArticleCard({
           {title}
         </h3>
 
+        {/* AI Topic Tags */}
+        {(() => {
+          const tags = extractTags(title, summary, aiSummary, aiCategory);
+          return tags.length > 0 ? (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null;
+        })()}
+
         {/* AI Recommendation */}
         {aiSummary && (
           <div className="mb-2 flex items-start gap-1.5 rounded-md bg-indigo-50/50 px-2.5 py-2 dark:bg-indigo-950/30">
             <Sparkles className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-indigo-500" />
-            <p className="text-sm leading-relaxed text-indigo-700/80 dark:text-indigo-300/80 line-clamp-2">
+            <p className="text-sm leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
               {aiSummary}
             </p>
           </div>
@@ -98,6 +166,10 @@ export function ArticleCard({
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 dark:text-gray-500">
             {formatDate(publishedAt)}
+          </span>
+          <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            入库 {formatDate(createdAt)}
           </span>
           {relevanceScore != null && relevanceScore > 0 && (
             <span className="text-[11px] text-gray-400 dark:text-gray-500">

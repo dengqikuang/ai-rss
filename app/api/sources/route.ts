@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
   const providedFeedUrl = body.feedUrl ?? body.feed_url;
   if (!providedFeedUrl) {
-    return NextResponse.json({ error: "feedUrl is required" }, { status: 400 });
+    return NextResponse.json({ error: "请填写 RSS Feed 地址" }, { status: 400 });
   }
 
   let inspected;
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     inspected = await inspectFeed(providedFeedUrl);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not parse RSS feed" },
+      { error: error instanceof Error ? error.message : "无法解析 RSS Feed" },
       { status: 422 }
     );
   }
