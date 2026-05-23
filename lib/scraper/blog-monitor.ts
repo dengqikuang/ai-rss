@@ -85,7 +85,7 @@ async function processBlogArticle(url: string, sourceName: string) {
   if (!relevance.relevant) {
     // Still insert as skipped (user can find in "全部来源")
     await db.insert(articles).values({
-      sourceId: getManualSourceId(),
+      sourceId: await getManualSourceId(),
       title,
       url,
       author: sourceName,
@@ -103,7 +103,7 @@ async function processBlogArticle(url: string, sourceName: string) {
   const reading = await generateReadingNote(title, textContent);
 
   await db.insert(articles).values({
-    sourceId: getManualSourceId(),
+    sourceId: await getManualSourceId(),
     title,
     url,
     author: sourceName,

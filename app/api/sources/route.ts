@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  ensureDatabase();
+  await ensureDatabase();
   const body = (await request.json()) as {
     name?: string;
     url?: string;

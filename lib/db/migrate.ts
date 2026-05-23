@@ -3,12 +3,12 @@ import { db } from "./index";
 
 let migrated = false;
 
-export function ensureDatabase() {
+export async function ensureDatabase() {
   if (migrated) {
     return;
   }
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS sources (
       id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
       name text NOT NULL,
@@ -20,9 +20,9 @@ export function ensureDatabase() {
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     )
   `);
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS sources_feed_url_unique ON sources(feed_url)`);
+  await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS sources_feed_url_unique ON sources(feed_url)`);
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS articles (
       id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
       source_id integer NOT NULL,
@@ -36,9 +36,8 @@ export function ensureDatabase() {
       FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE cascade
     )
   `);
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS articles_url_unique ON articles(url)`);
+  await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS articles_url_unique ON articles(url)`);
 
-  // AI pipeline columns (add to existing tables)
   const aiColumns = [
     "ALTER TABLE articles ADD COLUMN is_relevant INTEGER",
     "ALTER TABLE articles ADD COLUMN relevance_score INTEGER",
@@ -48,10 +47,10 @@ export function ensureDatabase() {
     "ALTER TABLE articles ADD COLUMN fetch_status TEXT NOT NULL DEFAULT 'pending'"
   ];
   for (const stmt of aiColumns) {
-    try { db.run(sql.raw(stmt)); } catch { /* column already exists */ }
+    try { await db.run(sql.raw(stmt)); } catch { /* column already exists */ }
   }
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS reading_state (
       article_id integer PRIMARY KEY NOT NULL,
       is_read integer DEFAULT false NOT NULL,
@@ -69,21 +68,21 @@ export function ensureDatabase() {
 let manualSourceId: number | null = null;
 
 /** Get or create the sentinel source for manually added articles. */
-export function getManualSourceId(): number {
+export async function getManualSourceId(): Promise<number> {
   if (manualSourceId !== null) return manualSourceId;
 
-  const rows = db.all(
-    "SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1"
+  const rows = await db.all(
+    sql`SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1`
   ) as { id: number }[];
 
   if (rows.length > 0) {
     manualSourceId = rows[0].id;
   } else {
-    db.run(
-      "INSERT INTO sources (name, url, feed_url) VALUES ('手动添加', 'manual://articles', 'manual://articles')"
+    await db.run(
+      sql`INSERT INTO sources (name, url, feed_url) VALUES ('手动添加', 'manual://articles', 'manual://articles')`
     );
-    const inserted = db.all(
-      "SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1"
+    const inserted = await db.all(
+      sql`SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1`
     ) as { id: number }[];
     manualSourceId = inserted[0].id;
   }

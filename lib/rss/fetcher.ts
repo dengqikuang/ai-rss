@@ -158,7 +158,7 @@ async function processArticleWithAI(articleId: number) {
  * Processes in batches to avoid rate limiting.
  */
 export async function processPendingArticles() {
-  ensureDatabase();
+  await ensureDatabase();
   const pending = await db
     .select({ id: articles.id })
     .from(articles)
@@ -189,7 +189,7 @@ export async function processPendingArticles() {
  * scrape the page → extract title/content → AI pipeline
  */
 export async function addArticleByUrl(url: string, sourceName?: string) {
-  ensureDatabase();
+  await ensureDatabase();
 
   const normalized = normalizeUrl(url);
 
@@ -230,7 +230,7 @@ export async function addArticleByUrl(url: string, sourceName?: string) {
       : null;
 
     // Insert without source_id, use sentinel source for manual articles
-    const manualId = getManualSourceId();
+    const manualId = await getManualSourceId();
     const [inserted] = await db
       .insert(articles)
       .values({
@@ -276,7 +276,7 @@ export async function inspectFeed(feedUrl: string) {
 }
 
 export async function fetchSource(source: typeof sources.$inferSelect) {
-  ensureDatabase();
+  await ensureDatabase();
   const feed = await parser.parseURL(source.feedUrl);
   let inserted = 0;
 
@@ -306,8 +306,8 @@ export async function fetchSource(source: typeof sources.$inferSelect) {
       })
       .onConflictDoNothing({ target: articles.url });
 
-    if (result.changes > 0) {
-      inserted += result.changes;
+    if (result.rowsAffected > 0) {
+      inserted += result.rowsAffected;
     }
   }
 
@@ -320,7 +320,7 @@ export async function fetchSource(source: typeof sources.$inferSelect) {
 }
 
 export async function fetchAllSources() {
-  ensureDatabase();
+  await ensureDatabase();
   const allSources = await db.select().from(sources).orderBy(sources.name);
   const results = [];
 
@@ -363,7 +363,7 @@ export async function fetchAllSources() {
 }
 
 export async function fetchIfStale(maxAgeMs = 5 * 60 * 1000) {
-  ensureDatabase();
+  await ensureDatabase();
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(sources);
   if (count === 0) {
     return { skipped: true, reason: "no-sources" };
@@ -385,7 +385,7 @@ export async function listArticles(options: {
   filter?: "unread" | "bookmarked" | "read_later" | "ai_relevant" | "all_raw";
   sourceId?: number;
 }) {
-  ensureDatabase();
+  await ensureDatabase();
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.min(50, Math.max(1, options.limit ?? 20));
   const offset = (page - 1) * limit;
@@ -456,7 +456,7 @@ export async function listArticles(options: {
 }
 
 export async function getArticle(id: number) {
-  ensureDatabase();
+  await ensureDatabase();
   const [article] = await db.query.articles.findMany({
     where: eq(articles.id, id),
     with: {
@@ -470,7 +470,7 @@ export async function getArticle(id: number) {
 }
 
 export async function markArticleRead(id: number) {
-  ensureDatabase();
+  await ensureDatabase();
   const existing = await db.query.readingState.findFirst({
     where: eq(readingState.articleId, id)
   });
@@ -489,12 +489,12 @@ export async function markArticleRead(id: number) {
 }
 
 export async function listSources() {
-  ensureDatabase();
+  await ensureDatabase();
   return db.select().from(sources).orderBy(sources.name);
 }
 
 export async function unreadCountForSource(sourceId: number) {
-  ensureDatabase();
+  await ensureDatabase();
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)` })
     .from(articles)
@@ -510,12 +510,12 @@ export async function unreadCountForSource(sourceId: number) {
 }
 
 export async function removeSource(id: number) {
-  ensureDatabase();
+  await ensureDatabase();
   await db.delete(sources).where(eq(sources.id, id));
 }
 
 export async function articleExists(id: number) {
-  ensureDatabase();
+  await ensureDatabase();
   const [row] = await db
     .select({ id: articles.id })
     .from(articles)

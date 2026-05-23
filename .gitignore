@@ -58,3 +58,6 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+.vercel
+.playwright-mcp/
+data/

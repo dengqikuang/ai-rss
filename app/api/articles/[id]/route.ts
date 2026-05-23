@@ -28,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  ensureDatabase();
+  await ensureDatabase();
   const id = idFromParams(params);
   if (!id) {
     return NextResponse.json({ error: "无效的文章 ID" }, { status: 400 });
