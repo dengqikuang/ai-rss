@@ -81,6 +81,8 @@ function feedTitleFromUrl(feedUrl: string) {
  * 2. If relevant, scrape full content
  * 3. Generate AI reading recommendation
  */
+class IrrelevantArticleError extends Error {}
+
 async function processArticleWithAI(articleId: number) {
   const [article] = await db
     .select()
@@ -112,7 +114,7 @@ async function processArticleWithAI(articleId: number) {
           fetchStatus: "skipped"
         })
         .where(eq(articles.id, articleId));
-      throw new Error(`AI 判定该文章与 AI/创业主题不相关（相关度 ${relevance.score}分）`);
+      throw new IrrelevantArticleError(`AI 判定该文章与 AI/创业主题不相关（相关度 ${relevance.score}分）`);
     }
 
     // Step 2: Scrape full content
@@ -141,10 +143,13 @@ async function processArticleWithAI(articleId: number) {
       })
       .where(eq(articles.id, articleId));
   } catch (error) {
+    if (error instanceof IrrelevantArticleError) {
+      throw error;
+    }
     await db
       .update(articles)
       .set({
-        isRelevant: 1, // on error, default to relevant so the article is visible
+        isRelevant: 1,
         relevanceScore: 50,
         fetchStatus: "error"
       })

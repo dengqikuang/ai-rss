@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./index";
+import { db, localInit } from "./index";
 
 let migrated = false;
 
@@ -7,6 +7,9 @@ export async function ensureDatabase() {
   if (migrated) {
     return;
   }
+
+  // Wait for local SQLite PRAGMA foreign_keys = ON if applicable
+  await localInit;
 
   await db.run(sql`
     CREATE TABLE IF NOT EXISTS sources (
@@ -47,7 +50,14 @@ export async function ensureDatabase() {
     "ALTER TABLE articles ADD COLUMN fetch_status TEXT NOT NULL DEFAULT 'pending'"
   ];
   for (const stmt of aiColumns) {
-    try { await db.run(sql.raw(stmt)); } catch { /* column already exists */ }
+    try {
+      await db.run(sql.raw(stmt));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+        throw e;
+      }
+    }
   }
 
   await db.run(sql`
@@ -71,21 +81,14 @@ let manualSourceId: number | null = null;
 export async function getManualSourceId(): Promise<number> {
   if (manualSourceId !== null) return manualSourceId;
 
+  await db.run(
+    sql`INSERT INTO sources (name, url, feed_url) VALUES ('手动添加', 'manual://articles', 'manual://articles') ON CONFLICT (feed_url) DO NOTHING`
+  );
+
   const rows = await db.all(
     sql`SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1`
   ) as { id: number }[];
 
-  if (rows.length > 0) {
-    manualSourceId = rows[0].id;
-  } else {
-    await db.run(
-      sql`INSERT INTO sources (name, url, feed_url) VALUES ('手动添加', 'manual://articles', 'manual://articles')`
-    );
-    const inserted = await db.all(
-      sql`SELECT id FROM sources WHERE feed_url = 'manual://articles' LIMIT 1`
-    ) as { id: number }[];
-    manualSourceId = inserted[0].id;
-  }
-
+  manualSourceId = rows[0].id;
   return manualSourceId;
 }

@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { scrapeContent } from "./index";
 import { plainText } from "@/lib/utils";
 import { checkRelevance, generateReadingNote } from "@/lib/ai";
-import { getManualSourceId } from "@/lib/db/migrate";
+import { getManualSourceId, ensureDatabase } from "@/lib/db/migrate";
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -125,6 +125,7 @@ async function processBlogArticle(url: string, sourceName: string) {
  * Called from fetchAllSources() after RSS fetching.
  */
 export async function monitorBlogs(): Promise<{ name: string; added: number }[]> {
+  await ensureDatabase();
   const results: { name: string; added: number }[] = [];
 
   for (const source of BLOG_SOURCES) {
